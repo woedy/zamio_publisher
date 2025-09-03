@@ -80,9 +80,10 @@ const Dashboard = () => {
         }
 
         const data = await response.json();
-        setArtistName(data.data.artistName);
+        // Backend returns `publisherName`; fall back to `artistName` if present
+        setArtistName(data.data.publisherName || data.data.artistName || '');
         setTotalPlays(data.data.totalPlays);
-        setTotalStations(data.data.totalPlays);
+        setTotalStations(data.data.totalStations);
         setTotalEarnings(data.data.totalEarnings);
         setStreamingPlays(data.data.streamingPlays);
 

@@ -1,12 +1,22 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import UserOne from '../../images/user/user-01.png';
-import { baseUrlMedia, userEmail, username, userPhoto } from '../../constants';
+import { baseUrlMedia } from '../../constants';
 import ClickOutside from '../Sidebar/ClickOutside';
 
 const DropdownUser = () => {
-  console.log(username);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Read current values at render time so they reflect latest login
+  const { displayName, email, photo } = useMemo(() => {
+    const email = localStorage.getItem('email') || '';
+    const first = localStorage.getItem('first_name') || '';
+    const last = localStorage.getItem('last_name') || '';
+    const username = localStorage.getItem('username') || '';
+    const displayName = username || [first, last].filter(Boolean).join(' ') || email || 'User';
+    const photo = localStorage.getItem('photo') || '';
+    return { displayName, email, photo };
+  }, []);
 
   return (
     <ClickOutside onClick={() => setDropdownOpen(false)} className="relative">
@@ -17,14 +27,14 @@ const DropdownUser = () => {
       >
         <span className="hidden text-right lg:block">
           <span className="block text-sm font-medium text-black dark:text-white">
-          {`${username}`} 
+            {displayName}
           </span>
-          <span className="block text-xs">{userEmail}</span>
+          <span className="block text-xs">{email}</span>
         </span>
 
         <span className="block h-12 w-12 rounded-full overflow-hidden">
   <img
-    src={`${baseUrlMedia}${userPhoto}`}
+    src={`${baseUrlMedia}${photo}`}
     alt="User"
     className="object-cover w-full h-full"
   />

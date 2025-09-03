@@ -66,6 +66,14 @@ const SignIn = () => {
         // Save to localStorage
         localStorage.setItem('first_name', user.first_name);
         localStorage.setItem('last_name', user.last_name);
+        // Provide a username value for header display
+        try {
+          const compositeName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
+          const uname = user.username || compositeName;
+          if (uname) localStorage.setItem('username', uname);
+        } catch (_) {
+          // no-op
+        }
         localStorage.setItem('user_id', user.user_id);
         localStorage.setItem('publisher_id', user.publisher_id);
         localStorage.setItem('email', user.email);
