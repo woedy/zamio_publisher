@@ -27,7 +27,7 @@ const AllArtistsRoyalties = () => {
     setLoading(true);
     try {
       const response = await fetch(
-        `${baseUrl}api/music-monitor/stations-match-disputes/?search=${encodeURIComponent(
+        `${baseUrl}api/publisher/artists-royalties/?search=${encodeURIComponent(
           search,
         )}&publisher_id=${encodeURIComponent(
           publisherID,

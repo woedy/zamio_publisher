@@ -42,7 +42,7 @@ const RevenueSplit = () => {
       formData.append('writer_split', writerSplit);
       formData.append('publisher_split', publisherSplit);
     
-      const url = baseUrl + 'api/accounts/complete-revenue-split/';
+      const url = '/api/accounts/complete-revenue-split/';
     
       try {
         setLoading(true);

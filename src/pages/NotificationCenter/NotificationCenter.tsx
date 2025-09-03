@@ -10,32 +10,6 @@ import {
 } from 'lucide-react';
 import { baseUrl, publisherID, userToken } from '../../constants';
 
-const notifications22 = [
-  {
-    id: 1,
-    type: 'summary',
-    title: 'Weekly Summary Report',
-    message: '45 songs detected this week on XYZ FM',
-    timestamp: '2 days ago',
-    icon: <Radio className="text-blue-400" />,
-  },
-  {
-    id: 2,
-    type: 'compliance',
-    title: 'Compliance Reminder',
-    message: 'Your June report is pending export. Deadline in 3 days.',
-    timestamp: '1 day ago',
-    icon: <AlertCircle className="text-yellow-400" />,
-  },
-  {
-    id: 3,
-    type: 'update',
-    title: 'New Feature: Station Insights',
-    message: 'View listener reachmaps and regional breakdowns.',
-    timestamp: 'Just now',
-    icon: <Sparkles className="text-purple-400" />,
-  },
-];
 
 const NotificationCenter = () => {
   const [search, setSearch] = useState('');
@@ -51,7 +25,7 @@ const NotificationCenter = () => {
     setLoading(true);
     try {
       const response = await fetch(
-        `${baseUrl}api/notifications/get-all-station-notifications/?search=${encodeURIComponent(
+        `${baseUrl}api/notifications/get-all-publisher-notifications/?search=${encodeURIComponent(
           search,
         )}&publisher_id=${encodeURIComponent(
           publisherID,

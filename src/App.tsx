@@ -25,6 +25,7 @@ import AllArtistsRoyalties from './pages/Royalties/AllArtistsRoyalties';
 import NotificationCenter from './pages/NotificationCenter/NotificationCenter';
 import EducationSupport from './pages/Education&Support/HelpSupport';
 import PublisherProfile from './pages/Profile/PublisherProfile';
+import ContractDetails from './pages/ContractManagement/ContractDetails';
 
 const hiddenOnRoutes = [
   '/',
@@ -107,6 +108,16 @@ function App() {
             <>
               <PageTitle title="Publisher - Artist Contracts | ZamIO Publishers" />
               <AllArtistsContracts />
+            </>
+          }
+        />
+  
+  <Route
+          path="/contract-details"
+          element={
+            <>
+              <PageTitle title="Publisher - Contract Details | ZamIO Publishers" />
+              <ContractDetails />
             </>
           }
         />

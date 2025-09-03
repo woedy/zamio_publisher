@@ -27,7 +27,7 @@ const MatchLogViewer = () => {
 
     try {
       const response = await fetch(
-        `${baseUrl}api/artists/playlogs/?search=${encodeURIComponent(
+        `${baseUrl}api/publishers/playlogs/?search=${encodeURIComponent(
           search,
         )}&publisher_id=${publisherID}&page=${currentPage}&log_page_state=${logPageState}`,
         {

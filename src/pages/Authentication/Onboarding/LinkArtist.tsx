@@ -42,15 +42,11 @@ const LinkArtist = () => {
       return;
     }
 
-    // Prepare FormData for file upload
+    // Prepare minimal payload for backend link-artist step
     const formData = new FormData();
     formData.append('publisher_id', publisherID);
-    formData.append('facebook', facebook);
-    formData.append('twitter', twitter);
-    formData.append('instagram', instagram);
-    formData.append('youtube', youtube);
 
-    const url = baseUrl + 'api/accounts/complete-revenue-split/';
+    const url = '/api/accounts/complete-link-artist/';
 
     try {
       setLoading(true);

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { baseUrl } from '../../constants';
+import api from '../../lib/api';
 import ButtonLoader from '../../common/button_loader';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 
@@ -52,28 +53,21 @@ const SignIn = () => {
   
     if (!isValid) return;
   
-    const url = baseUrl + 'api/accounts/login-publisher/';
+    const url = 'api/accounts/login-publisher/';
     const data = { email, password, fcm_token };
   
     setLoading(true);
   
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-  
-      const responseData = await response.json();
-  
+      const response = await api.post(url, data);
       if (response.status === 200) {
-        const user = responseData.data;
+        const user = response.data.data;
   
         // Save to localStorage
         localStorage.setItem('first_name', user.first_name);
         localStorage.setItem('last_name', user.last_name);
         localStorage.setItem('user_id', user.user_id);
-        localStorage.setItem('artist_id', user.artist_id);
+        localStorage.setItem('publisher_id', user.publisher_id);
         localStorage.setItem('email', user.email);
         localStorage.setItem('photo', user.photo);
         localStorage.setItem('token', user.token);
@@ -102,6 +96,7 @@ const SignIn = () => {
         }
   
       } else if (response.status === 400) {
+        const responseData = response.data;
         setEmailError(responseData.errors?.email?.[0] || '');
         setPasswordError(responseData.errors?.password?.[0] || '');
   
@@ -116,10 +111,17 @@ const SignIn = () => {
         }
   
       } else {
-        console.error('Login failed:', responseData.message);
+        console.error('Login failed:', response.data?.message);
       }
-    } catch (error) {
-      console.error('Error:', error.message);
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || error?.message || 'Login failed';
+      const errs = error?.response?.data?.errors;
+      if (errs) {
+        setEmailError(errs?.email?.[0] || '');
+        setPasswordError(errs?.password?.[0] || '');
+      } else {
+        setEmailError(msg);
+      }
     } finally {
       setLoading(false);
     }

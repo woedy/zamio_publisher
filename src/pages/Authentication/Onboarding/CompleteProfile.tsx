@@ -71,7 +71,7 @@ const CompleteProfile = () => {
     formData.append('region', region);
     formData.append('photo', selectedFile);
   
-    const url = baseUrl + 'api/accounts/complete-publisher-profile/';
+    const url = '/api/accounts/complete-publisher-profile/';
   
     try {
       setLoading(true);
@@ -99,7 +99,11 @@ const CompleteProfile = () => {
       console.log('Profile updated successfully');
   
       // Move to next onboarding step (backend returns this)
-      const nextStep = data.data.next_step;
+      let nextStep = data.data?.next_step as string | undefined;
+      if (!nextStep || nextStep === 'profile') {
+        // Fallback to the expected next step after profile
+        nextStep = 'revenue-split';
+      }
   
       switch (nextStep) {
         case 'profile':

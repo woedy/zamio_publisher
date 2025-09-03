@@ -27,7 +27,7 @@ const AllArtistsContracts = () => {
     setLoading(true);
     try {
       const response = await fetch(
-        `${baseUrl}api/music-monitor/stations-match-disputes/?search=${encodeURIComponent(
+        `${baseUrl}api/publishers/all-contracts/?search=${encodeURIComponent(
           search,
         )}&publisher_id=${encodeURIComponent(
           publisherID,

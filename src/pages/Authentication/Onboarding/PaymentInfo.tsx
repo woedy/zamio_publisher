@@ -39,17 +39,17 @@ const PaymentInfo = () => {
       formData.append('momo', momo);
       formData.append('bankAccount', bankAccount);
     
-      const url = baseUrl + 'api/accounts/complete-publisher-payment/';
+      const url = '/api/accounts/complete-publisher-payment/';
     
       try {
         setLoading(true);
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            Authorization: `Token ${localStorage.getItem('token')}`,
-          },
-          body: formData,
-        });
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Token ${localStorage.getItem('token')}`,
+        },
+        body: formData,
+      });
     
         const data = await response.json();
     
