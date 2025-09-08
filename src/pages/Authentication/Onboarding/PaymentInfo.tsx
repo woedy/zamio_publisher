@@ -105,7 +105,13 @@ const PaymentInfo = () => {
 
     const handleSkip = async (e) => {
       e.preventDefault();
-  
+      try {
+        await fetch('/api/accounts/skip-publisher-onboarding/', {
+          method: 'POST',
+          headers: { Authorization: `Token ${localStorage.getItem('token')}` },
+          body: new URLSearchParams({ publisher_id: String(publisherID), step: 'done' }),
+        });
+      } catch {}
       navigate('/dashboard');
       window.location.reload();
     };

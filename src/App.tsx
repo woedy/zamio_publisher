@@ -22,10 +22,14 @@ import ArtistDetails from './pages/ManageArtists/ArtistDetails';
 import MatchLogViewer from './pages/PlaylogsMatchLog/FullDetectionTable';
 import AllArtistsContracts from './pages/ContractManagement/AllArtistsContracts';
 import AllArtistsRoyalties from './pages/Royalties/AllArtistsRoyalties';
+import ArtistRoyaltiesDetail from './pages/Royalties/ArtistRoyaltiesDetail';
 import NotificationCenter from './pages/NotificationCenter/NotificationCenter';
 import EducationSupport from './pages/Education&Support/HelpSupport';
 import PublisherProfile from './pages/Profile/PublisherProfile';
 import ContractDetails from './pages/ContractManagement/ContractDetails';
+import DisputesList from './pages/Disputes/DisputesList';
+import DisputeDetails from './pages/Disputes/DisputeDetails';
+import AddContract from './pages/ContractManagement/AddContract';
 
 const hiddenOnRoutes = [
   '/',
@@ -51,7 +55,6 @@ function App() {
     setTimeout(() => setLoading(false), 1000);
   }, []);
 
-  // Determine if the current route should skip the layout
   const shouldUseDefaultLayout = !hiddenOnRoutes.includes(location.pathname);
 
   return loading ? (
@@ -59,6 +62,7 @@ function App() {
   ) : shouldUseDefaultLayout ? (
     <DefaultLayout hiddenOnRoutes={hiddenOnRoutes}>
       <Routes>
+        {/* Protected routes */}
         <Route
           path="/dashboard"
           element={
@@ -68,7 +72,7 @@ function App() {
             </>
           }
         />
-  
+
         <Route
           path="/all-artists"
           element={
@@ -78,9 +82,8 @@ function App() {
             </>
           }
         />
-  
-  
-  <Route
+
+        <Route
           path="/artist-details"
           element={
             <>
@@ -89,8 +92,8 @@ function App() {
             </>
           }
         />
-  
-  <Route
+
+        <Route
           path="/match-logs"
           element={
             <>
@@ -99,10 +102,8 @@ function App() {
             </>
           }
         />
-  
-    
-  
-  <Route
+
+        <Route
           path="/artists-contracts"
           element={
             <>
@@ -111,8 +112,8 @@ function App() {
             </>
           }
         />
-  
-  <Route
+
+        <Route
           path="/contract-details"
           element={
             <>
@@ -121,9 +122,8 @@ function App() {
             </>
           }
         />
-  
-  
-  <Route
+
+        <Route
           path="/artists-royalties"
           element={
             <>
@@ -132,8 +132,17 @@ function App() {
             </>
           }
         />
-  
-  <Route
+        <Route
+          path="/artist-royalties/:artistId"
+          element={
+            <>
+              <PageTitle title="Artist Royalties | ZamIO Publishers" />
+              <ArtistRoyaltiesDetail />
+            </>
+          }
+        />
+
+        <Route
           path="/notifications"
           element={
             <>
@@ -142,9 +151,8 @@ function App() {
             </>
           }
         />
-  
-    
-  <Route
+
+        <Route
           path="/help-support"
           element={
             <>
@@ -153,8 +161,8 @@ function App() {
             </>
           }
         />
-  
-  <Route
+
+        <Route
           path="/profile"
           element={
             <>
@@ -163,9 +171,37 @@ function App() {
             </>
           }
         />
-  
-    
-    
+
+        {/* Disputes */}
+        <Route
+          path="/disputes"
+          element={
+            <>
+              <PageTitle title="Disputes | ZamIO Publishers" />
+              <DisputesList />
+            </>
+          }
+        />
+        <Route
+          path="/dispute-details"
+          element={
+            <>
+              <PageTitle title="Dispute Details | ZamIO Publishers" />
+              <DisputeDetails />
+            </>
+          }
+        />
+
+        {/* Contracts */}
+        <Route
+          path="/add-contract"
+          element={
+            <>
+              <PageTitle title="New Contract | ZamIO Publishers" />
+              <AddContract />
+            </>
+          }
+        />
       </Routes>
     </DefaultLayout>
   ) : (
@@ -208,7 +244,7 @@ function App() {
             </>
           }
         />
-     <Route
+        <Route
           path="/onboarding/profile"
           element={
             <>
@@ -217,7 +253,7 @@ function App() {
             </>
           }
         />
-     <Route
+        <Route
           path="/onboarding/revenue-split"
           element={
             <>
@@ -226,7 +262,7 @@ function App() {
             </>
           }
         />
-     <Route
+        <Route
           path="/onboarding/link-artist"
           element={
             <>
@@ -235,7 +271,7 @@ function App() {
             </>
           }
         />
-     <Route
+        <Route
           path="/onboarding/payment"
           element={
             <>

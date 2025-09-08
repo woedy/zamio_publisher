@@ -6,8 +6,18 @@ import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 
 const RevenueSplit = () => {
 
-  const [writerSplit, setWriterSplit] = useState('');
-  const [publisherSplit, setPublisherSplit] = useState('');
+  const [writerSplit, setWriterSplit] = useState<string>('');
+  const [publisherSplit, setPublisherSplit] = useState<string>('');
+  const toNumber = (v: string) => {
+    const n = parseFloat(v);
+    return isNaN(n) ? NaN : n;
+  };
+  const total = (() => {
+    const w = toNumber(writerSplit);
+    const p = toNumber(publisherSplit);
+    if (isNaN(w) || isNaN(p)) return NaN;
+    return +(w + p).toFixed(2);
+  })();
 
 
   const [inputError, setInputError] = useState('');
@@ -24,13 +34,26 @@ const RevenueSplit = () => {
       setInputError('');
     
       // Frontend validations
-      if (writerSplit === '') {
-        setInputError('Artist split required.');
+      const w = toNumber(writerSplit);
+      const p = toNumber(publisherSplit);
+      if (writerSplit === '' || isNaN(w)) {
+        setInputError('Artist split required (number).');
         return;
       }
-    
-      if (publisherSplit === '') {
-        setInputError('Publisher required.');
+      if (publisherSplit === '' || isNaN(p)) {
+        setInputError('Publisher split required (number).');
+        return;
+      }
+      if (w < 0 || p < 0) {
+        setInputError('Splits must be >= 0.');
+        return;
+      }
+      if (w > 100 || p > 100) {
+        setInputError('Splits must be <= 100.');
+        return;
+      }
+      if (+(w + p).toFixed(2) !== 100) {
+        setInputError('Artist + Publisher must equal 100%.');
         return;
       }
     
@@ -39,8 +62,8 @@ const RevenueSplit = () => {
       // Prepare FormData for file upload
       const formData = new FormData();
       formData.append('publisher_id', publisherID);
-      formData.append('writer_split', writerSplit);
-      formData.append('publisher_split', publisherSplit);
+      formData.append('writer_split', String(w));
+      formData.append('publisher_split', String(p));
     
       const url = '/api/accounts/complete-revenue-split/';
     
@@ -137,7 +160,7 @@ const RevenueSplit = () => {
             <div className="">
           
               <input
-                type="text"
+                type="number"
                 name="writerSplit"
                 placeholder="Artist Split"
                 value={writerSplit}
@@ -145,13 +168,14 @@ const RevenueSplit = () => {
                 className="w-full px-6 py-4 mb-2 bg-white/20 backdrop-blur-md border border-white/30 rounded-lg text-white placeholder-white  focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
               <input
-                type="text"
+                type="number"
                 name="report"
                 placeholder="Publisher Split"
                 value={publisherSplit}
                 onChange={(e) => setPublisherSplit(e.target.value)}
                 className="w-full px-6 py-4 bg-white/20 backdrop-blur-md border border-white/30 rounded-lg text-white placeholder-white  focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
+              <div className="text-white/80 text-sm mt-1">Total: {isNaN(total) ? '-' : `${total}%`}</div>
             </div>
      
 
@@ -170,13 +194,22 @@ const RevenueSplit = () => {
 
           {/* Link to Register */}
           <p className=" text-white mt-6 text-center">
-         
-            <Link
-              to="/onboarding/link-artist"
+            <button
+              onClick={async (e) => {
+                e.preventDefault();
+                try {
+                  await fetch('/api/accounts/skip-publisher-onboarding/', {
+                    method: 'POST',
+                    headers: { Authorization: `Token ${localStorage.getItem('token')}` },
+                    body: new URLSearchParams({ publisher_id: String(publisherID), step: 'link-artist' }),
+                  });
+                } catch {}
+                navigate('/onboarding/link-artist');
+              }}
               className="underline text-white hover:text-blue-200"
             >
               Skip
-            </Link>
+            </button>
           </p>
         </div>
       </div>

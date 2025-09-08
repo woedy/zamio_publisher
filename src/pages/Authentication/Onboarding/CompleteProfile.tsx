@@ -237,12 +237,22 @@ const CompleteProfile = () => {
 
           {/* Link to Register */}
           <p className=" text-white mt-6 text-center">
-            <Link
-              to="/onboarding/revenue-split"
+            <button
+              onClick={async (e) => {
+                e.preventDefault();
+                try {
+                  await fetch('/api/accounts/skip-publisher-onboarding/', {
+                    method: 'POST',
+                    headers: { Authorization: `Token ${localStorage.getItem('token')}` },
+                    body: new URLSearchParams({ publisher_id: String(publisherID), step: 'revenue-split' }),
+                  });
+                } catch {}
+                navigate('/onboarding/revenue-split');
+              }}
               className="underline text-white hover:text-blue-200"
             >
               Skip
-            </Link>
+            </button>
           </p>
         </div>
       </div>

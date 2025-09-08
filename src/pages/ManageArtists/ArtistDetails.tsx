@@ -1,338 +1,144 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useSearchParams, Link } from 'react-router-dom';
 import {
-  Play,
-  Music,
-  TrendingUp,
-  MapPin,
   Activity,
-  Settings,
-  Bell,
-  BarChart3,
+  Users,
   Radio,
-  Eye,
-  Clock,
-  Target,
   DollarSign,
-  Share2,
-  Plus,
-  Edit,
-  Trash2,
-  Upload,
-  X,
-  ChevronDown,
-  ChevronUp,
+  MapPin,
   Verified,
+  Music,
 } from 'lucide-react';
 import { baseUrl, baseUrlMedia, userToken } from '../../constants';
-import { useLocation } from 'react-router-dom';
+
+// Types aligned to backend publishers/managed-artist-details payload
+type ArtistData = {
+  name: string;
+  stageName: string;
+  bio?: string | null;
+  avatar?: string | null;
+  coverImage?: string | null;
+  verified: boolean;
+  followers: number;
+  totalPlays: number;
+  totalEarnings: number;
+  joinDate: string; // ISO date
+  location?: string | null;
+  genres?: string[];
+  contact?: {
+    email?: string | null;
+    phone?: string | null;
+    instagram?: string | null;
+    twitter?: string | null;
+    facebook?: string | null;
+  };
+};
+
+type Song = {
+  id: number;
+  title: string;
+  duration?: string | null;
+  releaseDate?: string | null;
+  totalPlays: number;
+  totalEarnings: number;
+  status: string; // Active/Inactive
+  album?: string | null;
+  genre?: string | null;
+  contributors?: { name: string; role: string; percentage: number }[];
+  recentPlays?: { station: string; date: string; plays: number; earnings: number }[];
+};
+
+type RoyaltyItem = {
+  date: string; // YYYY-MM-DD
+  amount: number;
+  source: string; // Radio Airplay / Streaming
+  status: string; // Paid/Pending
+};
+
+type PlayLog = {
+  id: number;
+  song: string;
+  station: string;
+  date: string; // YYYY-MM-DD HH:mm
+  duration?: string | null;
+  confidence: number;
+  earnings: number;
+};
 
 const ArtistDetails = () => {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [isEditing, setIsEditing] = useState(false);
-  const [expandedSong, setExpandedSong] = useState(null);
-  const [showAddContributor, setShowAddContributor] = useState(false);
-  const [selectedContributor, setSelectedContributor] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const [artistData, setArtistData] = useState({});
-  const [songs, setSongs] = useState([]);
-  const [royaltyHistory, setRoyaltyHistory] = useState([]);
-  const [playLogs, setPlayLogs] = useState([]);
-
   const location = useLocation();
-  const { artist_id } = location.state || {};
+  const [params] = useSearchParams();
+  const stateArtistId = (location.state as any)?.artist_id as string | undefined;
+  const qpArtistId = params.get('artist_id') || undefined;
+  const artistId = stateArtistId || qpArtistId;
 
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'catalog' | 'royalty' | 'plays'>('catalog');
 
+  const [artistData, setArtistData] = useState<ArtistData | null>(null);
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [royaltyHistory, setRoyaltyHistory] = useState<RoyaltyItem[]>([]);
+  const [playLogs, setPlayLogs] = useState<PlayLog[]>([]);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
+      if (!artistId) {
+        setError('Missing artist_id');
+        return;
+      }
       setLoading(true);
+      setError(null);
       try {
-        const response = await fetch(
-          baseUrl + `api/artists/get-artist-profile/?artist_id=${artist_id}`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Token ${userToken}`,
-            },
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
+        const url = `${baseUrl}api/publishers/managed-artist-details/?artist_id=${encodeURIComponent(
+          String(artistId),
+        )}`;
+        const resp = await fetch(url, {
+          headers: { 'Content-Type': 'application/json', Authorization: `Token ${userToken}` },
+        });
+        const json = await resp.json();
+        if (!resp.ok) {
+          const msg = json?.errors ? (Object.values(json.errors).flat() as string[]).join('\n') : json?.message || 'Failed to load';
+          throw new Error(msg);
         }
-
-        const data = await response.json();
-        setArtistData(data.data.artistData);
-        setSongs(data.data.songs);
-        setRoyaltyHistory(data.data.royaltyHistory);
-        setPlayLogs(data.data.playLogs);
-
-      } catch (error) {
-        console.error('Error fetching data:', error);
+        if (cancelled) return;
+        setArtistData(json?.data?.artistData || null);
+        setSongs(json?.data?.songs || []);
+        setRoyaltyHistory(json?.data?.royaltyHistory || []);
+        setPlayLogs(json?.data?.playLogs || []);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || 'Failed to load');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-
     fetchData();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [artistId]);
 
-  const TabButton = ({ id, label, icon: Icon, isActive, onClick }) => (
+  const totalCatalogPlays = useMemo(() => songs.reduce((a, s) => a + (s.totalPlays || 0), 0), [songs]);
+  const totalCatalogEarnings = useMemo(() => songs.reduce((a, s) => a + (s.totalEarnings || 0), 0), [songs]);
+
+  const avatarUrl = artistData?.avatar ? (artistData.avatar.startsWith('http') ? artistData.avatar : `${baseUrlMedia}${artistData.avatar}`) : '';
+
+  const TabButton = ({ id, label }: { id: 'catalog' | 'royalty' | 'plays'; label: string }) => (
     <button
-      onClick={() => onClick(id)}
-      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
-        isActive
-          ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+      onClick={() => setActiveTab(id)}
+      className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+        activeTab === id
+          ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white shadow-lg'
           : 'text-gray-300 hover:text-white hover:bg-white/10'
       }`}
     >
-      <Icon className="w-4 h-4" />
-      <span className="font-medium">{label}</span>
+      {label}
     </button>
   );
 
-  const SongCard = ({ song, isExpanded, onToggle }) => (
-    <div className="bg-white/5 backdrop-blur-md rounded-xl p-6 border border-white/10 hover:bg-white/10 transition-all">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-4">
-          <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-3 rounded-xl">
-            <Music className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-white">{song.title}</h3>
-            <p className="text-sm text-gray-300">
-              {song.duration} • {song.album} • {song.genre}
-            </p>
-            <p className="text-xs text-gray-400">Released {song.releaseDate}</p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-4">
-          <div className="text-right">
-            <div className="text-white font-semibold">
-              {song.totalPlays.toLocaleString()} plays
-            </div>
-            <div className="text-green-400 text-sm">
-              ₵{song.totalEarnings.toFixed(2)}
-            </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <button className="bg-green-500/20 text-green-400 p-2 rounded-lg hover:bg-green-500/30 transition-colors">
-              <Play className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => onToggle(song.id)}
-              className="bg-white/10 p-2 rounded-lg hover:bg-white/20 transition-colors"
-            >
-              {isExpanded ? (
-                <ChevronUp className="w-4 h-4 text-gray-300" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-gray-300" />
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {isExpanded && (
-        <div className="space-y-4 border-t border-white/10 pt-4">
-          {/* Contributors */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-semibold text-white">
-                Contributors & Splits
-              </h4>
-              <button
-                onClick={() => setShowAddContributor(true)}
-                className="bg-purple-500/20 text-purple-400 px-3 py-1 rounded-lg text-sm hover:bg-purple-500/30 transition-colors flex items-center"
-              >
-                <Plus className="w-3 h-3 mr-1" />
-                Add
-              </button>
-            </div>
-            <div className="space-y-2">
-              {song.contributors.map((contributor, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
-                >
-                  <div>
-                    <div className="text-white font-medium">
-                      {contributor.name}
-                    </div>
-                    <div className="text-sm text-gray-300">
-                      {contributor.role}
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="text-purple-400 font-semibold">
-                      {contributor.percentage}%
-                    </div>
-                    <button className="text-gray-400 hover:text-white">
-                      <Edit className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent Plays */}
-          <div>
-            <h4 className="text-sm font-semibold text-white mb-3">
-              Recent Plays
-            </h4>
-            <div className="space-y-2">
-              {song.recentPlays.map((play, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="bg-blue-500/20 p-2 rounded-lg">
-                      <Radio className="w-4 h-4 text-blue-400" />
-                    </div>
-                    <div>
-                      <div className="text-white font-medium">
-                        {play.station}
-                      </div>
-                      <div className="text-sm text-gray-300">{play.date}</div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-white">{play.plays} plays</div>
-                    <div className="text-green-400 text-sm">
-                      ₵{play.earnings.toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex space-x-2 pt-2">
-            <button className="bg-purple-500/20 text-purple-400 px-3 py-2 rounded-lg text-sm hover:bg-purple-500/30 transition-colors flex items-center">
-              <Edit className="w-4 h-4 mr-1" />
-              Edit
-            </button>
-            <button className="bg-blue-500/20 text-blue-400 px-3 py-2 rounded-lg text-sm hover:bg-blue-500/30 transition-colors flex items-center">
-              <BarChart3 className="w-4 h-4 mr-1" />
-              Analytics
-            </button>
-            <button className="bg-green-500/20 text-green-400 px-3 py-2 rounded-lg text-sm hover:bg-green-500/30 transition-colors flex items-center">
-              <DollarSign className="w-4 h-4 mr-1" />
-              Royalties
-            </button>
-            <button className="bg-red-500/20 text-red-400 px-3 py-2 rounded-lg text-sm hover:bg-red-500/30 transition-colors flex items-center">
-              <Trash2 className="w-4 h-4 mr-1" />
-              Delete
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  const AddSongModal = ({ isOpen, onClose }) => {
-    if (!isOpen) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="bg-slate-900 rounded-2xl p-6 w-full max-w-md border border-white/20">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-white">Add New Song</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <form className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Song Title
-              </label>
-              <input
-                type="text"
-                className="w-full bg-white/10 text-white px-4 py-2 rounded-lg border border-white/20 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                placeholder="Enter song title"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Duration
-                </label>
-                <input
-                  type="text"
-                  className="w-full bg-white/10 text-white px-4 py-2 rounded-lg border border-white/20 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                  placeholder="3:45"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Genre
-                </label>
-                <select className="w-full bg-white/10 text-white px-4 py-2 rounded-lg border border-white/20 focus:outline-none focus:ring-2 focus:ring-purple-400">
-                  <option>Afrobeats</option>
-                  <option>Highlife</option>
-                  <option>Hip-Hop</option>
-                  <option>R&B</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Album
-              </label>
-              <input
-                type="text"
-                className="w-full bg-white/10 text-white px-4 py-2 rounded-lg border border-white/20 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                placeholder="Album name"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Audio File
-              </label>
-              <div className="border-2 border-dashed border-white/20 rounded-lg p-4 text-center">
-                <Upload className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">
-                  Click to upload or drag and drop
-                </p>
-              </div>
-            </div>
-
-            <div className="flex space-x-4 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 bg-white/10 text-white py-2 rounded-lg hover:bg-white/20 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2 rounded-lg hover:shadow-lg transition-shadow"
-              >
-                Add Song
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br">
-      {/* Header */}
       <header className="bg-black/20 backdrop-blur-md border-b border-white/10 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -341,41 +147,31 @@ const ArtistDetails = () => {
                 <Music className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white">{artistData.name}</h1>
+                <h1 className="text-2xl font-bold text-white">{artistData?.name || 'Artist'}</h1>
                 <p className="text-gray-300 text-sm">Artist Dashboard</p>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
-              <button
-                //onClick={() => setShowAddSong(true)}
-                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-lg font-semibold hover:shadow-lg transition-shadow flex items-center"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Song
-              </button>
-              <button className="bg-white/10 backdrop-blur-md p-2 rounded-lg border border-white/20 hover:bg-white/20 transition-colors">
-                <Bell className="w-5 h-5 text-gray-300" />
-              </button>
-              <button className="bg-white/10 backdrop-blur-md p-2 rounded-lg border border-white/20 hover:bg-white/20 transition-colors">
-                <Settings className="w-5 h-5 text-gray-300" />
-              </button>
+            <div className="flex items-center space-x-2 text-sm">
+              <Link to="/all-artists" className="bg-white/10 px-3 py-2 rounded border border-white/20 text-white hover:bg-white/20">
+                Back to Artists
+              </Link>
             </div>
           </div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Artist Header */}
+        {/* Header card */}
         <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 mb-8">
           <div className="flex items-start justify-between mb-6">
             <div className="flex items-center space-x-6">
               <div className="relative">
-                <img
-                  src={`${baseUrlMedia}${artistData?.avatar}`}
-                  alt={artistData.name}
-                  className="w-24 h-24 rounded-2xl object-cover border-4 border-white/20"
-                />
-                {artistData.verified && (
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={artistData?.name} className="w-24 h-24 rounded-2xl object-cover border-4 border-white/20" />
+                ) : (
+                  <div className="w-24 h-24 rounded-2xl bg-white/10 border-4 border-white/20" />
+                )}
+                {artistData?.verified && (
                   <div className="absolute -top-2 -right-2 bg-blue-500 p-1 rounded-full">
                     <Verified className="w-4 h-4 text-white" />
                   </div>
@@ -383,423 +179,190 @@ const ArtistDetails = () => {
               </div>
               <div>
                 <div className="flex items-center space-x-3 mb-2">
-                  <h1 className="text-3xl font-bold text-white">
-                    {artistData.name}
-                  </h1>
-                  <span className="text-lg text-gray-300">
-                    ({artistData.stageName})
-                  </span>
+                  <h1 className="text-3xl font-bold text-white">{artistData?.name}</h1>
+                  {artistData?.stageName && (
+                    <span className="text-lg text-gray-300">({artistData.stageName})</span>
+                  )}
                 </div>
-                <p className="text-gray-300 mb-3 max-w-2xl">{artistData.bio}</p>
+                {artistData?.bio && <p className="text-gray-300 mb-3 max-w-2xl">{artistData.bio}</p>}
                 <div className="flex items-center space-x-4 text-sm text-gray-400">
                   <div className="flex items-center space-x-1">
                     <MapPin className="w-4 h-4" />
-                    <span>{artistData.location}</span>
+                    <span>{artistData?.location || '—'}</span>
                   </div>
                   <span>•</span>
-                  <span>Joined {artistData.joinDate}</span>
-                  <span>•</span>
-                  <span>
-                    {artistData?.followers?.toLocaleString()} followers
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2 mt-3">
-                  {artistData?.genres?.map((genre, idx) => (
-                    <span
-                      key={idx}
-                      className="bg-purple-500/20 text-purple-400 px-2 py-1 rounded-full text-xs"
-                    >
-                      {genre}
-                    </span>
-                  ))}
+                  <span>Joined {artistData?.joinDate}</span>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button className="bg-white/10 text-white px-4 py-2 rounded-lg font-semibold border border-white/20 hover:bg-white/20 transition-colors flex items-center">
-                <Share2 className="w-4 h-4 mr-2" />
-                Share
-              </button>
-              <button
-                onClick={() => setIsEditing(!isEditing)}
-                className="bg-white/10 text-white px-4 py-2 rounded-lg font-semibold border border-white/20 hover:bg-white/20 transition-colors flex items-center"
-              >
-                <Edit className="w-4 h-4 mr-2" />
-                Edit Profile
-              </button>
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="text-center p-4 bg-white/5 rounded-xl">
-              <div className="text-2xl font-bold text-white">
-                {artistData?.totalPlays?.toLocaleString()}
+          {/* KPI cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-gray-300">Total Plays</div>
+                  <div className="text-2xl font-bold text-white">{artistData?.totalPlays?.toLocaleString?.() || 0}</div>
+                </div>
+                <Activity className="w-6 h-6 text-blue-400" />
               </div>
-              <div className="text-sm text-gray-300">Total Plays</div>
             </div>
-            <div className="text-center p-4 bg-white/5 rounded-xl">
-              <div className="text-2xl font-bold text-green-400">
-                ₵{artistData?.totalEarnings?.toLocaleString()}
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-gray-300">Total Earnings</div>
+                  <div className="text-2xl font-bold text-green-400">₵{(artistData?.totalEarnings || 0).toFixed(2)}</div>
+                </div>
+                <DollarSign className="w-6 h-6 text-green-400" />
               </div>
-              <div className="text-sm text-gray-300">Total Earnings</div>
             </div>
-            <div className="text-center p-4 bg-white/5 rounded-xl">
-              <div className="text-2xl font-bold text-purple-400">
-                {songs.length}
+            <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-gray-300">Followers</div>
+                  <div className="text-2xl font-bold text-white">{artistData?.followers || 0}</div>
+                </div>
+                <Users className="w-6 h-6 text-pink-400" />
               </div>
-              <div className="text-sm text-gray-300">Songs Registered</div>
-            </div>
-            <div className="text-center p-4 bg-white/5 rounded-xl">
-              <div className="text-2xl font-bold text-blue-400">12</div>
-              <div className="text-sm text-gray-300">Radio Stations</div>
             </div>
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex space-x-2 mb-8 bg-white/10 backdrop-blur-md p-1 rounded-lg border border-white/20 w-fit">
-          <TabButton
-            id="overview"
-            label="Overview"
-            icon={Eye}
-            isActive={activeTab === 'overview'}
-            onClick={setActiveTab}
-          />
-          <TabButton
-            id="songs"
-            label="Songs"
-            icon={Music}
-            isActive={activeTab === 'songs'}
-            onClick={setActiveTab}
-          />
-          <TabButton
-            id="playlogs"
-            label="Play Logs"
-            icon={Activity}
-            isActive={activeTab === 'playlogs'}
-            onClick={setActiveTab}
-          />
-          <TabButton
-            id="royalties"
-            label="Royalties"
-            icon={DollarSign}
-            isActive={activeTab === 'royalties'}
-            onClick={setActiveTab}
-          />
-          <TabButton
-            id="analytics"
-            label="Analytics"
-            icon={BarChart3}
-            isActive={activeTab === 'analytics'}
-            onClick={setActiveTab}
-          />
-          <TabButton
-            id="publisher"
-            label="Publisher"
-            icon={Music}
-            isActive={activeTab === 'publisher'}
-            onClick={setActiveTab}
-          />
+        {/* Tabs */}
+        <div className="mb-6">
+          <div className="flex space-x-2 bg-white/10 backdrop-blur-md p-1 rounded-lg border border-white/20 w-fit">
+            <TabButton id="catalog" label="Catalog" />
+            <TabButton id="royalty" label="Royalty History" />
+            <TabButton id="plays" label="Recent Plays" />
+          </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="space-y-8">
-          {activeTab === 'overview' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Recent Activity */}
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-                <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                  <Activity className="w-5 h-5 mr-2 text-blue-400" />
-                  Recent Activity
-                </h2>
-                <div className="space-y-3">
-                  {playLogs.slice(0, 5).map((log) => (
-                    <div
-                      key={log.id}
-                      className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-blue-500/20 p-2 rounded-lg">
-                          <Radio className="w-4 h-4 text-blue-400" />
-                        </div>
-                        <div>
-                          <div className="text-white font-medium">
-                            {log.song}
-                          </div>
-                          <div className="text-sm text-gray-300">
-                            {log.station} • {log.date}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-green-400 font-semibold">
-                        ₵{log.earnings.toFixed(2)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Top Performing Songs */}
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-                <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                  <TrendingUp className="w-5 h-5 mr-2 text-purple-400" />
-                  Top Performing Songs
-                </h2>
-                <div className="space-y-3">
-                  {songs.slice(0, 3).map((song, idx) => (
-                    <div
-                      key={song.id}
-                      className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
-                          {idx + 1}
-                        </div>
-                        <div>
-                          <div className="text-white font-medium">
-                            {song.title}
-                          </div>
-                          <div className="text-sm text-gray-300">
-                            {song.totalPlays.toLocaleString()} plays
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-green-400 font-semibold">
-                        ₵{song.totalEarnings.toFixed(2)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Quick Stats */}
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-                <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                  <Target className="w-5 h-5 mr-2 text-green-400" />
-                  This Month's Performance
-                </h2>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Total Plays</span>
-                    <span className="text-white font-semibold">1,247</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Total Earnings</span>
-                    <span className="text-green-400 font-semibold">
-                      ₵748.20
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">New Followers</span>
-                    <span className="text-purple-400 font-semibold">+234</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300">Radio Coverage</span>
-                    <span className="text-blue-400 font-semibold">
-                      12 stations
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Pending Royalties */}
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-                <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                  <Clock className="w-5 h-5 mr-2 text-yellow-400" />
-                  Pending Royalties
-                </h2>
-                <div className="space-y-3">
-                  {royaltyHistory
-                    .filter((r) => r.status === 'Pending')
-                    .map((transaction, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
-                      >
-                        <div>
-                          <div className="text-white font-medium">
-                            {transaction.source}
-                          </div>
-                          <div className="text-sm text-gray-300">
-                            {transaction.date}
-                          </div>
-                        </div>
-                        <div className="text-yellow-400 font-semibold">
-                          ₵{transaction.amount.toFixed(2)}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Songs Tab */}
-          {activeTab === 'songs' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {songs.map((song) => (
-                <SongCard
-                  key={song.id}
-                  song={song}
-                  isExpanded={expandedSong === song.id}
-                  onToggle={(id) =>
-                    setExpandedSong(expandedSong === id ? null : id)
-                  }
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Play Logs Tab */}
-          {activeTab === 'playlogs' && (
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-              <h2 className="text-xl font-bold text-white mb-6 flex items-center">
-                <Activity className="w-5 h-5 mr-2 text-blue-400" />
-                Detailed Play Logs
+        {/* Tab Panels */}
+        {activeTab === 'catalog' && (
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white flex items-center">
+                <Music className="w-5 h-5 mr-2 text-purple-400" /> Catalog
               </h2>
-              <div className="overflow-auto rounded-xl">
-                <table className="min-w-full text-sm text-left text-gray-300">
-                  <thead className="text-xs uppercase bg-white/5 text-gray-400">
-                    <tr>
-                      <th className="px-4 py-3">Song</th>
-                      <th className="px-4 py-3">Station</th>
-                      <th className="px-4 py-3">Date & Time</th>
-                      <th className="px-4 py-3">Duration</th>
-                      <th className="px-4 py-3">Confidence</th>
-                      <th className="px-4 py-3">Earnings</th>
+            </div>
+            <div className="overflow-auto rounded-xl">
+              <table className="min-w-full text-sm text-left text-gray-300">
+                <thead className="text-xs uppercase bg-white/5 text-gray-400">
+                  <tr>
+                    <th className="px-4 py-3">Title</th>
+                    <th className="px-4 py-3">Album</th>
+                    <th className="px-4 py-3">Genre</th>
+                    <th className="px-4 py-3">Release</th>
+                    <th className="px-4 py-3">Plays</th>
+                    <th className="px-4 py-3">Earnings</th>
+                    <th className="px-4 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white/5 divide-y divide-white/10">
+                  {songs.map((s) => (
+                    <tr key={s.id}>
+                      <td className="px-4 py-2 text-white">{s.title}</td>
+                      <td className="px-4 py-2">{s.album || '—'}</td>
+                      <td className="px-4 py-2">{s.genre || '—'}</td>
+                      <td className="px-4 py-2">{s.releaseDate || '—'}</td>
+                      <td className="px-4 py-2">{(s.totalPlays || 0).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-green-400">₵{(s.totalEarnings || 0).toFixed(2)}</td>
+                      <td className="px-4 py-2">{s.status}</td>
                     </tr>
-                  </thead>
-                  <tbody className="bg-white/5 divide-y divide-white/10">
-                    {playLogs.map((log) => (
-                      <tr key={log.id}>
-                        <td className="px-4 py-2 text-white">{log.song}</td>
-                        <td className="px-4 py-2">{log.station}</td>
-                        <td className="px-4 py-2">{log.date}</td>
-                        <td className="px-4 py-2">{log.duration}</td>
-                        <td className="px-4 py-2">{log.confidence}%</td>
-                        <td className="px-4 py-2 text-green-400 font-medium">
-                          ₵{log.earnings.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Royalties Tab */}
-          {activeTab === 'royalties' && (
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-              <h2 className="text-xl font-bold text-white mb-6 flex items-center">
-                <DollarSign className="w-5 h-5 mr-2 text-green-400" />
-                Royalty History
-              </h2>
-              <div className="overflow-auto rounded-xl">
-                <table className="min-w-full text-sm text-left text-gray-300">
-                  <thead className="text-xs uppercase bg-white/5 text-gray-400">
+                  ))}
+                  {!songs.length && (
                     <tr>
-                      <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">Source</th>
-                      <th className="px-4 py-3">Amount</th>
-                      <th className="px-4 py-3">Status</th>
+                      <td className="px-4 py-6 text-center text-gray-400" colSpan={7}>No catalog yet.</td>
                     </tr>
-                  </thead>
-                  <tbody className="bg-white/5 divide-y divide-white/10">
-                    {royaltyHistory.map((royalty, idx) => (
-                      <tr key={idx}>
-                        <td className="px-4 py-2 text-white">{royalty.date}</td>
-                        <td className="px-4 py-2">{royalty.source}</td>
-                        <td className="px-4 py-2 text-green-400">
-                          ₵{royalty.amount.toFixed(2)}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              royalty.status === 'Paid'
-                                ? 'bg-green-500/20 text-green-300'
-                                : 'bg-yellow-500/20 text-yellow-300'
-                            }`}
-                          >
-                            {royalty.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Analytics Tab */}
-          {activeTab === 'analytics' && (
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-              <h2 className="text-xl font-bold text-white mb-6 flex items-center">
-                <BarChart3 className="w-5 h-5 mr-2 text-cyan-400" />
-                Analytics Overview
-              </h2>
-              <p className="text-sm text-gray-400 mb-4">
-                [Future: Add D3.js / Chart.js / Recharts visualizations here]
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-white/5 rounded-xl text-white">
-                  <h3 className="font-semibold mb-2">Most Played Song</h3>
-                  <p>
-                    {
-                      songs.sort((a, b) => b.totalPlays - a.totalPlays)[0]
-                        ?.title
-                    }
-                  </p>
-                </div>
-                <div className="p-4 bg-white/5 rounded-xl text-white">
-                  <h3 className="font-semibold mb-2">Top Earning Song</h3>
-                  <p>
-                    {
-                      songs.sort((a, b) => b.totalEarnings - a.totalEarnings)[0]
-                        ?.title
-                    }
-                  </p>
-                </div>
-              </div>
+        {activeTab === 'royalty' && (
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 mb-8">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+              <DollarSign className="w-5 h-5 mr-2 text-green-400" /> Royalty History
+            </h2>
+            <div className="overflow-auto rounded-xl">
+              <table className="min-w-full text-sm text-left text-gray-300">
+                <thead className="text-xs uppercase bg-white/5 text-gray-400">
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Amount</th>
+                    <th className="px-4 py-3">Source</th>
+                    <th className="px-4 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white/5 divide-y divide-white/10">
+                  {royaltyHistory.map((r, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-2">{r.date}</td>
+                      <td className="px-4 py-2 text-green-400">₵{(r.amount || 0).toFixed(2)}</td>
+                      <td className="px-4 py-2">{r.source}</td>
+                      <td className="px-4 py-2">{r.status}</td>
+                    </tr>
+                  ))}
+                  {!royaltyHistory.length && (
+                    <tr>
+                      <td className="px-4 py-6 text-center text-gray-400" colSpan={4}>No royalty entries.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-          {/* Publisher Tab */}
-          {activeTab === 'publisher' && (
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-              <h2 className="text-xl font-bold text-white mb-6 flex items-center">
-                <Music className="w-5 h-5 mr-2 text-cyan-400" />
-                PublisheR Info
-              </h2>
-              <p className="text-sm text-gray-400 mb-4">
-                [Future: Add D3.js / Chart.js / Recharts visualizations here]
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-white/5 rounded-xl text-white">
-                  <h3 className="font-semibold mb-2">Percentage Split</h3>
-                  <p>
-                    {
-                      songs.sort((a, b) => b.totalPlays - a.totalPlays)[0]
-                        ?.title
-                    }
-                  </p>
-                </div>
-                <div className="p-4 bg-white/5 rounded-xl text-white">
-                  <h3 className="font-semibold mb-2">Change Publisher</h3>
-                  <p>
-                    {
-                      songs.sort((a, b) => b.totalEarnings - a.totalEarnings)[0]
-                        ?.title
-                    }
-                  </p>
-                </div>
-              </div>
+          </div>
+        )}
+
+        {activeTab === 'plays' && (
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+              <Radio className="w-5 h-5 mr-2 text-yellow-400" /> Recent Plays
+            </h2>
+            <div className="overflow-auto rounded-xl">
+              <table className="min-w-full text-sm text-left text-gray-300">
+                <thead className="text-xs uppercase bg-white/5 text-gray-400">
+                  <tr>
+                    <th className="px-4 py-3">Song</th>
+                    <th className="px-4 py-3">Station</th>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Confidence</th>
+                    <th className="px-4 py-3">Earnings</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white/5 divide-y divide-white/10">
+                  {playLogs.map((pl) => (
+                    <tr key={pl.id}>
+                      <td className="px-4 py-2 text-white">{pl.song}</td>
+                      <td className="px-4 py-2">{pl.station}</td>
+                      <td className="px-4 py-2">{pl.date}</td>
+                      <td className="px-4 py-2">{pl.confidence}%</td>
+                      <td className="px-4 py-2 text-green-400">₵{(pl.earnings || 0).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  {!playLogs.length && (
+                    <tr>
+                      <td className="px-4 py-6 text-center text-gray-400" colSpan={5}>No recent plays.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-        
-        </div>
+          </div>
+        )}
       </div>
+
+      {loading && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+          <div className="text-white">Loading...</div>
+        </div>
+      )}
+      {error && (
+        <div className="fixed bottom-4 right-4 bg-red-500/90 text-white px-4 py-2 rounded shadow">{error}</div>
+      )}
     </div>
   );
 };

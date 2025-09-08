@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Music,
   TrendingUp,
@@ -19,34 +19,55 @@ import {
   Award,
   Smartphone,
 } from 'lucide-react';
-import { baseUrl, publisherID, userToken } from '../../constants';
+import { publisherID } from '../../constants';
+import api from '../../lib/api';
+  import type {
+    ApiEnvelope,
+    PublisherDashboardData,
+    PlaysOverTimePoint,
+    GhanaRegionBreakdownItem,
+    StationBreakdownItem,
+    RecentPlay,
+    Pipeline,
+    Splits,
+    TopSong,
+  } from '../../types/dashboard';
 
 const Dashboard = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('monthly');
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedRegion, setSelectedRegion] = useState('all');
 
-  const [totalPlays, setTotalPlays] = useState('');
-  const [artistName, setArtistName] = useState('');
-  const [totalStations, setTotalStations] = useState('');
-  const [totalEarnings, setTotalEarnings] = useState('');
-  const [streamingPlays, setStreamingPlays] = useState('');
-  const [topSongs, setTopSongs] = useState([]);
-  const [playsOverTime, setPlaysOverTime] = useState([]);
-  const [stationBreakdown, setStationBreakdown] = useState([]);
-  const [ghanaRegions, setGhanaRegions] = useState([]);
-  const [fanDemographics, setFanDemographics] = useState([]);
-  const [performanceScore, setPerformanceScore] = useState([]);
+  const [totalPlays, setTotalPlays] = useState<number>(0);
+  const [publisherName, setPublisherName] = useState<string>('');
+  const [totalStations, setTotalStations] = useState<number>(0);
+  const [totalEarnings, setTotalEarnings] = useState<number>(0);
+  const [streamingPlays, setStreamingPlays] = useState<number>(0);
+  const [topSongs, setTopSongs] = useState<TopSong[]>([]);
+  const [playsOverTime, setPlaysOverTime] = useState<PlaysOverTimePoint[]>([]);
+  const [stationBreakdown, setStationBreakdown] = useState<StationBreakdownItem[]>([]);
+  const [ghanaRegions, setGhanaRegions] = useState<GhanaRegionBreakdownItem[]>([]);
+  const [worksCount, setWorksCount] = useState<number>(0);
+  const [writersCount, setWritersCount] = useState<number>(0);
+  const [agreementsCount, setAgreementsCount] = useState<number>(0);
+  const [recentPlays, setRecentPlays] = useState<RecentPlay[]>([]);
+  const [pipeline, setPipeline] = useState<Pipeline>({ accrued: 0, unclaimedCount: 0, disputesCount: 0 });
+  const [splits, setSplits] = useState<Splits>({ publisher: 0, writers: 0 });
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
 
 
 
-  const maxPlays = Math.max(
-    ...playsOverTime.map((d) => Math.max(d.airplay, d.streaming)),
-  );
-  const maxRegionalPlays = Math.max(...ghanaRegions.map((r) => r.plays));
+  const maxPlays = useMemo(() => {
+    const vals = playsOverTime.flatMap((d) => [d.airplay, d.streaming]);
+    return vals.length ? Math.max(...vals) : 1;
+  }, [playsOverTime]);
+
+  const maxRegionalPlays = useMemo(() => {
+    return ghanaRegions.length ? Math.max(...ghanaRegions.map((r) => r.plays)) : 1;
+  }, [ghanaRegions]);
 
   const getRegionColors = (index) => {
     const colors = [
@@ -61,47 +82,58 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
+      if (!publisherID) {
+        setError('Missing publisher ID');
+        return;
+      }
       setLoading(true);
+      setError(null);
       try {
-        const response = await fetch(
-          baseUrl +
-            `api/publishers/dashboard/?publisher_id=${publisherID}&period=${selectedPeriod}`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Token ${userToken}`,
-            },
-          },
+        const { data } = await api.get<ApiEnvelope<PublisherDashboardData>>(
+          'api/publishers/dashboard/',
+          { params: { publisher_id: publisherID, period: selectedPeriod } }
         );
-
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-
-        const data = await response.json();
-        // Backend returns `publisherName`; fall back to `artistName` if present
-        setArtistName(data.data.publisherName || data.data.artistName || '');
-        setTotalPlays(data.data.totalPlays);
-        setTotalStations(data.data.totalStations);
-        setTotalEarnings(data.data.totalEarnings);
-        setStreamingPlays(data.data.streamingPlays);
-
-        setTopSongs(data.data.topSongs);
-        setPlaysOverTime(data.data.playsOverTime);
-        setGhanaRegions(data.data.ghanaRegions);
-        setStationBreakdown(data.data.stationBreakdown);
-        setPerformanceScore(data.data.performanceScore);
-        setFanDemographics(data.data.fanDemographics);
-      } catch (error) {
-        console.error('Error fetching data:', error);
+        if (cancelled) return;
+        const d = data.data;
+        setPublisherName(d.publisherName || '');
+        setTotalPlays(d.totalPlays);
+        setTotalStations(d.totalStations);
+        setTotalEarnings(d.totalEarnings);
+        setStreamingPlays(d.streamingPlays);
+        setTopSongs(d.topSongs || []);
+        setPlaysOverTime(d.playsOverTime || []);
+        setGhanaRegions(d.ghanaRegions || []);
+        setStationBreakdown(d.stationBreakdown || []);
+        setWorksCount(d.worksCount || 0);
+        setWritersCount(d.writersCount || 0);
+        setAgreementsCount(d.agreementsCount || 0);
+        setRecentPlays(d.recentPlays || []);
+        setPipeline(d.pipeline || { accrued: 0, unclaimedCount: 0, disputesCount: 0 });
+        setSplits(d.splits || { publisher: 0, writers: 0 });
+      } catch (e: any) {
+        console.error('Error fetching dashboard:', e);
+        setError(e?.response?.data?.message || 'Failed to load dashboard');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-
     fetchData();
-  }, [selectedPeriod]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPeriod, publisherID]);
+
+  const formatDateTime = (iso?: string | null) => {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString();
+    } catch {
+      return iso;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br ">
@@ -114,8 +146,8 @@ const Dashboard = () => {
                 <Mic className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white">{artistName}</h1>
-                <p className="text-gray-300 text-sm">Artist Dashboard</p>
+                <h1 className="text-2xl font-bold text-white">{publisherName || 'Publisher'}</h1>
+                <p className="text-gray-300 text-sm">Publisher Dashboard</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -158,6 +190,14 @@ const Dashboard = () => {
           </div>
         </div>
 
+        {/* Loading / Error States */}
+        {loading && (
+          <div className="text-gray-300 mb-6">Loading dashboard...</div>
+        )}
+        {!loading && error && (
+          <div className="mb-6 text-red-300">{error}</div>
+        )}
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-gradient-to-br from-purple/20 to-slate-500/20 backdrop-blur-md rounded-2xl p-6 border border-white/10">
@@ -166,15 +206,11 @@ const Dashboard = () => {
                 <Radio className="w-6 h-6 text-purple-400" />
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold text-white">
-                  {totalPlays.toLocaleString()}
-                </div>
-                <div className="text-sm text-gray-300">Total Airplay</div>
+                <div className="text-2xl font-bold text-white">{totalPlays.toLocaleString()}</div>
+                <div className="text-sm text-gray-300">Total Performances</div>
               </div>
             </div>
-            <div className="text-xs text-purple-400">
-              ↑ 23.5% from last month
-            </div>
+            <div className="text-xs text-purple-400">Across selected period</div>
           </div>
 
           <div className="bg-gradient-to-br from-green/20 to-emerald/20 backdrop-blur-md rounded-2xl p-6 border border-white/10">
@@ -183,15 +219,11 @@ const Dashboard = () => {
                 <DollarSign className="w-6 h-6 text-green-400" />
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold text-white">
-                  ₵{totalEarnings.toLocaleString()}
-                </div>
+                <div className="text-2xl font-bold text-white">₵{totalEarnings.toLocaleString()}</div>
                 <div className="text-sm text-gray-300">Total Earnings</div>
               </div>
             </div>
-            <div className="text-xs text-green-400">
-              ↑ 18.2% from last month
-            </div>
+            <div className="text-xs text-green-400">Gross accrued</div>
           </div>
 
           <div className="bg-gradient-to-br from-blue-500/20 to-cyan-600/20 backdrop-blur-md rounded-2xl p-6 border border-white/10">
@@ -200,13 +232,11 @@ const Dashboard = () => {
                 <Headphones className="w-6 h-6 text-blue-400" />
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold text-white">
-                  {streamingPlays.toLocaleString()}
-                </div>
-                <div className="text-sm text-gray-300">Streaming Plays</div>
+                <div className="text-2xl font-bold text-white">{worksCount.toLocaleString()}</div>
+                <div className="text-sm text-gray-300">Works in Catalog</div>
               </div>
             </div>
-            <div className="text-xs text-blue-400">↑ 45.7% from last month</div>
+            <div className="text-xs text-blue-400">Tracks under administration</div>
           </div>
 
           <div className="bg-gradient-to-br from-orange-500/20 to-red-600/20 backdrop-blur-md rounded-2xl p-6 border border-white/10">
@@ -215,9 +245,7 @@ const Dashboard = () => {
                 <Globe className="w-6 h-6 text-orange-400" />
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold text-white">
-                  {totalStations}
-                </div>
+                <div className="text-2xl font-bold text-white">{totalStations}</div>
                 <div className="text-sm text-gray-300">Active Stations</div>
               </div>
             </div>
@@ -289,7 +317,7 @@ const Dashboard = () => {
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-white flex items-center">
                   <Music className="w-5 h-5 mr-2 text-purple-400" />
-                  Top Songs Played
+                  Top Works by Plays
                 </h2>
                 <button className="text-sm text-gray-300 hover:text-white flex items-center">
                   View All <Eye className="w-4 h-4 ml-1" />
@@ -315,9 +343,7 @@ const Dashboard = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-white font-semibold">
-                        {song.plays.toLocaleString()}
-                      </div>
+                        <div className="text-white font-semibold">{song.plays.toLocaleString()}</div>
                       <div className="text-sm text-green-400">
                         ₵{song.earnings.toFixed(2)}
                       </div>
@@ -435,66 +461,65 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Fan Demographics */}
+            {/* Recent Activity */}
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-white flex items-center">
                   <Users className="w-5 h-5 mr-2 text-pink-400" />
-                  Fan Demographics
+                  Recent Activity
                 </h2>
               </div>
-              <div className="space-y-4">
-                {fanDemographics.map((demo, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-300">{demo.ageGroup}</span>
-                      <span className="text-white font-semibold">
-                        {demo.percentage}%
-                      </span>
+              <div className="space-y-3">
+                {recentPlays.slice(0, 8).map((rp, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                    <div className="min-w-0">
+                      <div className="text-white font-semibold truncate">{rp.track}</div>
+                      <div className="text-xs text-gray-300 truncate">{rp.station} • {rp.region} • {rp.source}</div>
                     </div>
-                    <div className="w-full bg-white/10 rounded-full h-2">
-                      <div
-                        className={`h-full bg-gradient-to-r ${demo.color} rounded-full transition-all duration-500`}
-                        style={{ width: `${demo.percentage}%` }}
-                      />
+                    <div className="text-right">
+                      <div className="text-xs text-gray-300">{formatDateTime(rp.playedAt)}</div>
+                      <div className="text-xs text-green-400">₵{rp.royalty.toFixed(2)}</div>
                     </div>
                   </div>
                 ))}
+                {!recentPlays.length && (
+                  <div className="text-sm text-gray-300">No recent plays.</div>
+                )}
               </div>
             </div>
 
-            {/* Performance Score */}
+            {/* Roster & Agreements */}
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-white flex items-center">
                   <Award className="w-5 h-5 mr-2 text-purple-400" />
-                  Performance Score
+                  Roster & Agreements
                 </h2>
               </div>
-              <div className="text-center space-y-4">
-                <div className="text-4xl font-bold text-white">
-                  {performanceScore.overall}
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Writers</span>
+                  <span className="text-white font-semibold">{writersCount}</span>
                 </div>
-                <div className="text-sm text-gray-300">Out of 10</div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-300">Airplay Growth</span>
-                    <span className="text-green-400">
-                      {performanceScore.airplayGrowth}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-300">Regional Reach</span>
-                    <span className="text-blue-400">
-                      {performanceScore.RegionalReach}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-300">Fan Engagement</span>
-                    <span className="text-purple-400">
-                      {performanceScore.fanEngagement}
-                    </span>
-                  </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Agreements</span>
+                  <span className="text-white font-semibold">{agreementsCount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Publisher Split</span>
+                  <span className="text-white font-semibold">{splits.publisher}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Writers Split</span>
+                  <span className="text-white font-semibold">{splits.writers}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Unclaimed Logs</span>
+                  <span className="text-yellow-400 font-semibold">{pipeline.unclaimedCount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Disputes</span>
+                  <span className="text-red-400 font-semibold">{pipeline.disputesCount}</span>
                 </div>
               </div>
             </div>
